@@ -18,6 +18,7 @@ from apps.api.app.api.v1.endpoints import (
     investigations,
     sites,
     health,
+    audits,
 )
 
 
@@ -62,6 +63,7 @@ app.include_router(health.router, prefix="/api")
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(investigations.router, prefix=settings.API_V1_STR)
 app.include_router(sites.router, prefix=settings.API_V1_STR)
+app.include_router(audits.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")
