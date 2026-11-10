@@ -211,3 +211,82 @@ async def test_error_handling_sanitization():
         text = resp.text
         assert "Traceback" not in text
         assert "File \"" not in text
+
+
+@pytest.mark.asyncio
+async def test_email_self_audit_challenge_and_verification():
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Request challenge
+        challenge_resp = await client.post(
+            "/api/v1/audits/email/challenge",
+            json={"email": "tarunmitblr@gmail.com"},
+        )
+        assert challenge_resp.status_code == 200
+        ch_data = challenge_resp.json()
+        assert "challenge_id" in ch_data
+        assert "dev_otp" in ch_data
+        challenge_id = ch_data["challenge_id"]
+        otp = ch_data["dev_otp"]
+
+        # 2. Invalid OTP should fail with 400
+        bad_verify = await client.post(
+            "/api/v1/audits/email/verify",
+            json={"challenge_id": challenge_id, "code": "000000"},
+        )
+        assert bad_verify.status_code == 400
+
+        # 3. Valid OTP should execute audit and return investigation
+        verify_resp = await client.post(
+            "/api/v1/audits/email/verify",
+            json={"challenge_id": challenge_id, "code": otp},
+        )
+        assert verify_resp.status_code == 200
+        report = verify_resp.json()
+        assert report["email"] == "tarunmitblr@gmail.com"
+        assert report["verified_ownership"] is True
+        assert "investigation_id" in report
+
+        # 4. Verify investigation results endpoint returns the audit
+        inv_id = report["investigation_id"]
+        res_resp = await client.get(f"/api/v1/investigations/{inv_id}/results")
+        assert res_resp.status_code == 200
+        inv_data = res_resp.json()
+        assert inv_data["investigation"]["search_type"] == "email"
+        assert inv_data["summary"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_phone_self_audit_challenge_and_verification():
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Request challenge for 10-digit number
+        challenge_resp = await client.post(
+            "/api/v1/audits/phone/challenge",
+            json={"phone": "9140598622"},
+        )
+        assert challenge_resp.status_code == 200
+        ch_data = challenge_resp.json()
+        assert "challenge_id" in ch_data
+        assert "dev_otp" in ch_data
+        assert ch_data["phone"].startswith("+91")
+        challenge_id = ch_data["challenge_id"]
+        otp = ch_data["dev_otp"]
+
+        # 2. Verify with valid OTP
+        verify_resp = await client.post(
+            "/api/v1/audits/phone/verify",
+            json={"challenge_id": challenge_id, "code": otp},
+        )
+        assert verify_resp.status_code == 200
+        report = verify_resp.json()
+        assert report["verified_ownership"] is True
+        assert "investigation_id" in report
+        assert report["geographic_metadata"]["country"] == "India"
+        assert report["format"]["e164"] == "+919140598622"
+
+        # 3. Check investigation results
+        inv_id = report["investigation_id"]
+        res_resp = await client.get(f"/api/v1/investigations/{inv_id}/results")
+        assert res_resp.status_code == 200
+        inv_data = res_resp.json()
+        assert inv_data["investigation"]["search_type"] == "phone"
+        assert inv_data["summary"]["status"] == "completed"

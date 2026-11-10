@@ -112,7 +112,7 @@ class SiteDefinition(BaseModel):
     presence_indicators: List[str] = [] # Strings that MUST be present in page body
     absence_indicators: List[str] = []  # Strings that if present mean NOT found (soft 404)
     captcha_indicators: List[str] = [
-        "cf-chl-bypass", "challenge-running", "turnstile", "recaptcha",
+        "cf-chl-bypass", "challenge-running", "g-recaptcha", "/recaptcha/api.js",
         "human verification", "ddos protection", "robot check"
     ]
     extract_display_name_regex: Optional[str] = None

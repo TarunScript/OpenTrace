@@ -45,8 +45,10 @@ class ResponseClassifier:
         "cf-browser-verification",
         "client challenge",
         "cloudflare ray id",
-        "recaptcha",
-        "hcaptcha",
+        "g-recaptcha",
+        "/recaptcha/api.js",
+        "challenges.cloudflare.com",
+        "hcaptcha.com",
         "ddos-guard",
         "perimeterx",
         "security check to continue",
@@ -94,6 +96,16 @@ class ResponseClassifier:
         # 2. CAPTCHA / Anti-Bot Challenge Check
         for captcha_token in cls.CAPTCHA_INDICATORS + site.captcha_indicators:
             if captcha_token.lower() in body_lower:
+                # If explicit positive profile presence indicators are matched on expected 200,
+                # do not let stray bundled JS library names trigger a false captcha detection
+                if site.presence_indicators and status_code in site.expected_status:
+                    has_strong_presence = any(
+                        p.replace("{username}", target_username).lower() in body_lower
+                        for p in site.presence_indicators
+                    )
+                    if has_strong_presence:
+                        continue
+
                 evidence = EvidenceModel(
                     source_url=final_url,
                     evidence_type="anti_bot_challenge",

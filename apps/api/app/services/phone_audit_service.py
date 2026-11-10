@@ -31,9 +31,17 @@ class PhoneAuditService:
         """
         Validates phone number format and issues verification challenge.
         """
-        clean_num = re.sub(r"[^\d+]", "", phone_number.strip())
+        raw = phone_number.strip()
+        clean_num = re.sub(r"[^\d+]", "", raw)
         if not clean_num.startswith("+"):
-            clean_num = "+" + clean_num
+            # If 10 digits starting with 6-9 (common in India), assume India (+91)
+            if len(clean_num) == 10 and clean_num[0] in "6789":
+                clean_num = "+91" + clean_num
+            elif len(clean_num) == 10 and clean_num[0] in "23456789":
+                # General 10-digit fallback
+                clean_num = "+91" + clean_num
+            else:
+                clean_num = "+" + clean_num
 
         if len(clean_num) < 8 or len(clean_num) > 16:
             raise ValueError("Invalid phone number length. Must be in E.164 format (e.g. +919876543210).")

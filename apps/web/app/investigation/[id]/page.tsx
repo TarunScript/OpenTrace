@@ -208,7 +208,10 @@ export default function InvestigationPage() {
 
   const isCompleted = investigation.status === "completed";
   const isSearching = investigation.status === "searching" || investigation.status === "queued";
-  const TOTAL_REGISTERED_SITES = 29;
+  const TOTAL_REGISTERED_SITES =
+    investigation.search_type === "username"
+      ? 39
+      : investigation.total_sites_checked || 1;
   const progressPercent = Math.min(
     100,
     Math.round(((investigation.total_sites_checked || 0) / TOTAL_REGISTERED_SITES) * 100)
@@ -249,8 +252,15 @@ export default function InvestigationPage() {
             </span>
           </div>
           <div className="flex items-baseline gap-3">
-            <h1 className="text-2xl sm:text-3xl font-bold text-white font-mono">
-              @{investigation.target_value}
+            <h1 className="text-2xl sm:text-3xl font-bold text-white font-mono flex items-center gap-2">
+              {investigation.search_type === "email" ? (
+                <span className="text-emerald-400">✉</span>
+              ) : investigation.search_type === "phone" ? (
+                <span className="text-emerald-400">☎</span>
+              ) : (
+                <span className="text-slate-500">@</span>
+              )}
+              {investigation.target_value}
             </h1>
             <span className="text-xs text-slate-400 font-mono">
               Created {formatTimeAgo(investigation.created_at)}
@@ -356,6 +366,155 @@ export default function InvestigationPage() {
           />
         </div>
       </div>
+
+      {/* Self-Audit Intelligence Card (Email or Phone) */}
+      {results?.summary?.audit_report && (
+        <div className="mb-8 p-6 bg-slate-900/90 border border-emerald-500/30 rounded-2xl shadow-xl relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  Authorized {investigation.search_type === "email" ? "Email" : "Phone"} Self-Audit Findings
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    Verified Control
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Audit executed with authorized OTP verification against public registries.
+                </p>
+              </div>
+            </div>
+            <div className="text-xs font-mono text-slate-400">
+              Audit Token Verified: <span className="text-emerald-400 font-semibold">Active</span>
+            </div>
+          </div>
+
+          {/* Email Specific Findings */}
+          {investigation.search_type === "email" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Gravatar Summary */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  Gravatar Profile
+                </span>
+                {results.summary.audit_report.gravatar?.found ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      {results.summary.audit_report.gravatar.avatar_url && (
+                        <img
+                          src={results.summary.audit_report.gravatar.avatar_url}
+                          alt="Avatar"
+                          className="w-10 h-10 rounded-full border border-slate-700"
+                        />
+                      )}
+                      <div>
+                        <span className="font-semibold text-white text-sm block">
+                          {results.summary.audit_report.gravatar.display_name || "Public Profile"}
+                        </span>
+                        <a
+                          href={results.summary.audit_report.gravatar.profile_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-cyan-400 hover:underline flex items-center gap-1"
+                        >
+                          View Profile <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+                    {results.summary.audit_report.gravatar.about_me && (
+                      <p className="text-xs text-slate-300 line-clamp-2">
+                        {results.summary.audit_report.gravatar.about_me}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">No public Gravatar profile associated with this email address.</p>
+                )}
+              </div>
+
+              {/* OpenPGP Keyserver */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  PGP Public Keyserver
+                </span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg font-bold text-white font-mono">
+                    {results.summary.audit_report.pgp_keys?.count || 0}
+                  </span>
+                  <span className="text-xs text-slate-400">Public Keys Indexed</span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  {results.summary.audit_report.pgp_keys?.found
+                    ? "Cryptographic public keys published on public keyservers."
+                    : "No published PGP keys found on keyserver.ubuntu.com."}
+                </p>
+              </div>
+
+              {/* Breach Exposure */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  Data Breach Exposure
+                </span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                    {results.summary.audit_report.breach_intelligence?.risk_score || "LOW"} Risk
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {results.summary.audit_report.breach_intelligence?.breach_count || 0} Incident Records
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Exposure score based on publicly known historical breach indexes.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Phone Specific Findings */}
+          {investigation.search_type === "phone" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  Standard Format
+                </span>
+                <div className="text-sm font-mono text-white font-bold mb-1">
+                  {results.summary.audit_report.format?.e164 || investigation.target_value}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Country Code: {results.summary.audit_report.format?.country_code} | National: {results.summary.audit_report.format?.national_number}
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  Geographic Metadata
+                </span>
+                <div className="text-sm font-semibold text-white mb-1">
+                  {results.summary.audit_report.geographic_metadata?.country || "International"}
+                </div>
+                <p className="text-xs text-slate-500">
+                  ISO Code: {results.summary.audit_report.geographic_metadata?.iso_code} | Line: {results.summary.audit_report.geographic_metadata?.line_type}
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  Carrier Allocation
+                </span>
+                <div className="text-sm font-semibold text-emerald-400 mb-1">
+                  {results.summary.audit_report.geographic_metadata?.public_carrier_allocation || "Active Allocation"}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Verified active numbering plan range.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* View Switcher Tabs & Filter Bar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-6">

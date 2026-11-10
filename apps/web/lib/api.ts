@@ -62,6 +62,7 @@ export interface InvestigationResults {
     verified_profiles_count: number;
     inconclusive_count: number;
     category_breakdown: Record<string, number>;
+    audit_report?: any;
   };
 }
 
@@ -248,6 +249,59 @@ export const api = {
     if (typeof window !== "undefined") {
       localStorage.removeItem("opentrace_auth_token");
     }
+  },
+
+  // Self-Audits (Email & Phone)
+  async requestEmailChallenge(email: string): Promise<{ challenge_id: string; dev_otp?: string; message: string }> {
+    const res = await fetch(`${API_BASE_URL}/api/v1/audits/email/challenge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to request email verification.");
+    }
+    return res.json();
+  },
+
+  async verifyEmailAudit(challenge_id: string, code: string): Promise<any> {
+    const res = await fetch(`${API_BASE_URL}/api/v1/audits/email/verify`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ challenge_id, code }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Invalid or expired verification code.");
+    }
+    return res.json();
+  },
+
+  async requestPhoneChallenge(phone: string): Promise<{ challenge_id: string; dev_otp?: string; message: string }> {
+    const res = await fetch(`${API_BASE_URL}/api/v1/audits/phone/challenge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to request phone verification.");
+    }
+    return res.json();
+  },
+
+  async verifyPhoneAudit(challenge_id: string, code: string): Promise<any> {
+    const res = await fetch(`${API_BASE_URL}/api/v1/audits/phone/verify`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ challenge_id, code }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Invalid or expired verification code.");
+    }
+    return res.json();
   },
 };
 

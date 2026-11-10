@@ -193,6 +193,15 @@ async def get_investigation_results(
             )
         )
 
+    audit_report = None
+    if inv.options_json:
+        try:
+            import json
+            opts = json.loads(inv.options_json)
+            audit_report = opts.get("email_audit_report") or opts.get("phone_audit_report")
+        except Exception:
+            pass
+
     summary = {
         "target": inv.target_value,
         "search_type": inv.search_type,
@@ -201,6 +210,7 @@ async def get_investigation_results(
         "verified_profiles_count": len(profile_responses),
         "inconclusive_count": inv.inconclusive_count,
         "category_breakdown": category_counts,
+        "audit_report": audit_report,
     }
 
     return InvestigationResultsResponse(

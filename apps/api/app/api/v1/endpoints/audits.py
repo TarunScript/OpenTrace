@@ -2,13 +2,14 @@
 Email and Phone Self-Audit Endpoints
 Enforces authorized self-audit workflows with OTP verification.
 """
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.app.database.session import get_db
-from apps.api.app.models import User
+from apps.api.app.models import User, Profile, Evidence
 from apps.api.app.core.security import get_optional_current_user
 from apps.api.app.services.email_audit_service import EmailAuditService
 from apps.api.app.services.phone_audit_service import PhoneAuditService
@@ -78,6 +79,49 @@ async def verify_email_and_audit(
         options={"email_audit_report": report},
     )
 
+    verified_count = 0
+    # If Gravatar profile exists, persist profile & evidence record
+    gravatar_data = report.get("gravatar", {})
+    if gravatar_data.get("found"):
+        verified_count += 1
+        grav_profile = Profile(
+            investigation_id=inv.id,
+            platform="Gravatar",
+            category="social",
+            username=report["email"].split("@")[0],
+            profile_url=gravatar_data.get("profile_url") or f"https://gravatar.com/{report['email_hash']}",
+            display_name=gravatar_data.get("display_name") or report["email"].split("@")[0],
+            biography=gravatar_data.get("about_me"),
+            profile_image_url=gravatar_data.get("avatar_url"),
+            confidence_existence=0.99,
+            confidence_data=0.90,
+            identity_confidence=0.95,
+        )
+        db.add(grav_profile)
+        await db.flush()
+
+        ev = Evidence(
+            profile_id=grav_profile.id,
+            source_url=grav_profile.profile_url,
+            evidence_type="email_gravatar_match",
+            detection_method="json_api",
+            verification_status="verified",
+            confidence_score=0.98,
+            observed_at=datetime.now(timezone.utc),
+            match_evidence=f"Verified public Gravatar profile for hash {report['email_hash']}",
+        )
+        db.add(ev)
+
+    # Mark investigation as completed
+    await service.repo.update_status(
+        investigation_id=inv.id,
+        status="completed",
+        total_sites_checked=3,  # Gravatar, OpenPGP, Breach Check
+        verified_count=verified_count,
+        inconclusive_count=0,
+        completed=True,
+    )
+
     report["investigation_id"] = inv.id
     return report
 
@@ -127,5 +171,44 @@ async def verify_phone_and_audit(
         options={"phone_audit_report": report},
     )
 
+    # Persist verified telecom profile
+    geo = report.get("geographic_metadata", {})
+    phone_profile = Profile(
+        investigation_id=inv.id,
+        platform="Telecommunication Network",
+        category="tech",
+        username=report["phone"],
+        profile_url=f"tel:{report['phone']}",
+        display_name=f"{report['phone']} ({geo.get('country', 'Global')})",
+        biography=f"Line Type: {geo.get('line_type', 'Mobile')} | Country ISO: {geo.get('iso_code', 'XX')}",
+        confidence_existence=0.99,
+        confidence_data=0.95,
+        identity_confidence=0.99,
+    )
+    db.add(phone_profile)
+    await db.flush()
+
+    ev = Evidence(
+        profile_id=phone_profile.id,
+        source_url=phone_profile.profile_url,
+        evidence_type="phone_e164_verification",
+        detection_method="status_code",
+        verification_status="verified",
+        confidence_score=0.99,
+        observed_at=datetime.now(timezone.utc),
+        match_evidence=f"Authorized OTP verification confirmed ownership of {report['phone']}",
+    )
+    db.add(ev)
+
+    await service.repo.update_status(
+        investigation_id=inv.id,
+        status="completed",
+        total_sites_checked=1,
+        verified_count=1,
+        inconclusive_count=0,
+        completed=True,
+    )
+
     report["investigation_id"] = inv.id
     return report
+

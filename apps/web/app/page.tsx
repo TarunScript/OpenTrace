@@ -30,6 +30,16 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // OTP Verification Challenge State for Email & Phone Self-Audits
+  const [otpModalOpen, setOtpModalOpen] = useState(false);
+  const [otpChallengeId, setOtpChallengeId] = useState("");
+  const [otpTarget, setOtpTarget] = useState("");
+  const [otpType, setOtpType] = useState<"email" | "phone">("email");
+  const [devOtp, setDevOtp] = useState<string | undefined>(undefined);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+
   useEffect(() => {
     api.listSites().then(setSupportedSites).catch(() => {});
   }, []);
@@ -39,18 +49,48 @@ export default function HomePage() {
     const clean = query.trim().replace(/^@/, "");
     if (!clean) return;
 
-    if (searchTab !== "username") {
-      setError(
-        searchTab === "email"
-          ? "Email Self-Audit requires OTP verification (scheduled for Phase 3). Try a Username search to inspect public accounts now!"
-          : "Phone Self-Audit requires authorized OTP verification (scheduled for Phase 4). Try a Username search to inspect public accounts now!"
-      );
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
+    // Email Self-Audit Flow
+    if (searchTab === "email") {
+      try {
+        const challenge = await api.requestEmailChallenge(clean);
+        setOtpChallengeId(challenge.challenge_id);
+        setOtpTarget(clean);
+        setOtpType("email");
+        setDevOtp(challenge.dev_otp);
+        setOtpCode(challenge.dev_otp || "");
+        setOtpError(null);
+        setOtpModalOpen(true);
+      } catch (err: any) {
+        setError(err.message || "Failed to initiate email verification.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Phone Self-Audit Flow
+    if (searchTab === "phone") {
+      try {
+        const challenge = await api.requestPhoneChallenge(clean);
+        setOtpChallengeId(challenge.challenge_id);
+        setOtpTarget(clean);
+        setOtpType("phone");
+        setDevOtp(challenge.dev_otp);
+        setOtpCode(challenge.dev_otp || "");
+        setOtpError(null);
+        setOtpModalOpen(true);
+      } catch (err: any) {
+        setError(err.message || "Failed to initiate phone verification.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Standard Username Search Flow
     try {
       const options: any = {
         deep_search: isDeepSearch,
@@ -65,6 +105,31 @@ export default function HomePage() {
     } catch (err: any) {
       setError(err.message || "Failed to initiate investigation.");
       setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpCode.trim()) return;
+
+    setOtpVerifying(true);
+    setOtpError(null);
+
+    try {
+      let report: any;
+      if (otpType === "email") {
+        report = await api.verifyEmailAudit(otpChallengeId, otpCode.trim());
+      } else {
+        report = await api.verifyPhoneAudit(otpChallengeId, otpCode.trim());
+      }
+
+      setOtpModalOpen(false);
+      if (report.investigation_id) {
+        router.push(`/investigation/${report.investigation_id}`);
+      }
+    } catch (err: any) {
+      setOtpError(err.message || "Verification code is invalid or has expired.");
+      setOtpVerifying(false);
     }
   };
 
@@ -133,7 +198,7 @@ export default function HomePage() {
               }`}
             >
               <Mail className="w-3.5 h-3.5" />
-              Email Audit <span className="text-[10px] text-slate-500 font-mono">P3</span>
+              Email Audit
             </button>
             <button
               type="button"
@@ -145,14 +210,16 @@ export default function HomePage() {
               }`}
             >
               <Phone className="w-3.5 h-3.5" />
-              Phone Audit <span className="text-[10px] text-slate-500 font-mono">P4</span>
+              Phone Audit
             </button>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSearch} className="space-y-4">
             <div className="relative flex items-center">
-              <span className="absolute left-4 font-mono text-slate-500 text-lg font-bold">@</span>
+              <span className="absolute left-4 font-mono text-slate-500 text-lg font-bold">
+                {searchTab === "username" ? "@" : searchTab === "email" ? "✉" : "☎"}
+              </span>
               <input
                 type="text"
                 required
@@ -160,10 +227,10 @@ export default function HomePage() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={
                   searchTab === "username"
-                    ? "Enter target handle (e.g. torvalds, gvanrossum, tarun_dev)..."
+                    ? "Enter target handle (e.g. torvalds, tarun.this.side, shadcn)..."
                     : searchTab === "email"
-                    ? "Enter your verified email address (e.g. user@example.com)..."
-                    : "Enter your phone number with country code..."
+                    ? "Enter email address to audit (e.g. tarunmitblr@gmail.com)..."
+                    : "Enter phone number (e.g. 9140598622 or +919140598622)..."
                 }
                 className="w-full pl-11 pr-36 py-4 bg-slate-950 border border-slate-700/80 rounded-2xl text-white placeholder-slate-500 text-base sm:text-lg focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-mono transition-all"
               />
@@ -297,6 +364,93 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* OTP Ownership Verification Modal */}
+      {otpModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-5">
+              <Shield className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-xl font-bold text-white mb-2">
+              Verify {otpType === "email" ? "Email" : "Phone"} Ownership
+            </h3>
+            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+              OpenTrace enforces authorized self-audits to prevent malicious surveillance. A verification challenge was generated for:
+              <span className="block mt-1 font-mono text-emerald-400 text-sm font-semibold truncate">
+                {otpTarget}
+              </span>
+            </p>
+
+            {devOtp && (
+              <div className="mb-5 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-[11px] text-emerald-400 block font-semibold">Testing Code (Local Dev):</span>
+                  <span className="font-mono text-base font-extrabold text-white tracking-widest">{devOtp}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOtpCode(devOtp)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 font-mono text-xs transition-colors"
+                >
+                  Use Code
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono text-slate-400 mb-1.5 uppercase tracking-wider">
+                  6-Digit Verification Code
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  required
+                  autoFocus
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  placeholder="Enter 6-digit code..."
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-center text-xl tracking-[0.3em] placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+
+              {otpError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-300 flex items-center gap-2">
+                  <Info className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <span>{otpError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setOtpModalOpen(false)}
+                  disabled={otpVerifying}
+                  className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={otpVerifying || !otpCode.trim()}
+                  className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-all flex items-center justify-center gap-2 shadow-glow disabled:opacity-50"
+                >
+                  {otpVerifying ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                      Auditing...
+                    </>
+                  ) : (
+                    "Verify & Audit"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
