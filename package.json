@@ -1,0 +1,25 @@
+{
+  "name": "opentrace",
+  "version": "1.0.0",
+  "description": "Open-Source Digital Footprint Intelligence Platform",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "start": "npm --prefix apps/web run start"
+  },
+  "keywords": [
+    "osint",
+    "digital-footprint",
+    "intelligence",
+    "privacy",
+    "cybersecurity",
+    "username-search"
+  ],
+  "author": "OpenTrace Contributors",
+  "license": "Apache-2.0"
+}
+
