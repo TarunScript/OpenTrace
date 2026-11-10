@@ -392,6 +392,74 @@ export default function InvestigationPage() {
             </div>
           </div>
 
+          {/* Fingerprint.to-style Identity Overview Header for Email Audits */}
+          {investigation.search_type === "email" && results.summary.audit_report.discovered_metadata && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5 pb-5 border-b border-slate-800">
+              {/* Discovered Profile Pictures */}
+              <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  Profile Pictures ({results.summary.audit_report.discovered_metadata.avatars?.length || 0})
+                </span>
+                <div className="flex items-center gap-2 overflow-x-auto py-1">
+                  {results.summary.audit_report.discovered_metadata.avatars?.length > 0 ? (
+                    results.summary.audit_report.discovered_metadata.avatars.map((av: string, idx: number) => (
+                      <img
+                        key={idx}
+                        src={av}
+                        alt="Avatar"
+                        className="w-10 h-10 rounded-full border border-slate-700 object-cover flex-shrink-0"
+                      />
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500">No public profile pictures</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Discovered Usernames */}
+              <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  Discovered Usernames ({results.summary.audit_report.discovered_metadata.usernames?.length || 0})
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {results.summary.audit_report.discovered_metadata.usernames?.length > 0 ? (
+                    results.summary.audit_report.discovered_metadata.usernames.map((u: string) => (
+                      <span
+                        key={u}
+                        className="px-2 py-0.5 rounded-lg text-xs font-mono font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30"
+                      >
+                        @{u}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500 font-mono">None detected</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Discovered Full Names */}
+              <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2">
+                  Discovered Names ({results.summary.audit_report.discovered_metadata.names?.length || 0})
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {results.summary.audit_report.discovered_metadata.names?.length > 0 ? (
+                    results.summary.audit_report.discovered_metadata.names.map((n: string) => (
+                      <span
+                        key={n}
+                        className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700"
+                      >
+                        {n}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500">None detected</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Email Specific Findings */}
           {investigation.search_type === "email" && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

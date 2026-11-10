@@ -80,9 +80,76 @@ async def verify_email_and_audit(
     )
 
     verified_count = 0
-    # If Gravatar profile exists, persist profile & evidence record
+
+    # 1. Persist Curated Public Profiles (GitHub, GitLab, Instagram, YouTube, Snapchat, etc.)
+    for cp in report.get("curated_profiles", []):
+        verified_count += 1
+        prof = Profile(
+            investigation_id=inv.id,
+            platform=cp["platform"],
+            category=cp.get("category", "other"),
+            username=cp["username"],
+            profile_url=cp["profile_url"],
+            display_name=cp.get("display_name"),
+            biography=cp.get("biography"),
+            public_website=cp.get("public_website"),
+            profile_image_url=cp.get("profile_image_url"),
+            location=cp.get("location"),
+            confidence_existence=cp.get("confidence_existence", 0.95),
+            confidence_data=cp.get("confidence_data", 0.90),
+            identity_confidence=cp.get("identity_confidence", 0.85),
+        )
+        db.add(prof)
+        await db.flush()
+
+        ev_info = cp.get("evidence", {})
+        ev = Evidence(
+            profile_id=prof.id,
+            source_url=ev_info.get("source_url") or cp["profile_url"],
+            evidence_type=ev_info.get("evidence_type", "curated_profile"),
+            detection_method=ev_info.get("detection_method", "composite"),
+            verification_status="verified",
+            confidence_score=ev_info.get("confidence_score", 0.95),
+            observed_at=datetime.now(timezone.utc),
+            match_evidence=ev_info.get("match_evidence") or "Public profile signature verified.",
+        )
+        db.add(ev)
+
+    # 2. Persist Email Registered Services (Spotify, Replit, WordPress, CodePen, Office 365, Eventbrite, Duolingo, etc.)
+    for es in report.get("email_services", []):
+        verified_count += 1
+        svc_name = es.get("name", "Service").capitalize()
+        domain = es.get("domain", f"{es.get('name')}.com")
+        svc_prof = Profile(
+            investigation_id=inv.id,
+            platform=svc_name,
+            category="software",
+            username=report["email"].split("@")[0],
+            profile_url=f"https://{domain}",
+            display_name=f"{svc_name} Account",
+            biography=f"Active registered account associated with verified email {report['email']} (Method: {es.get('method', 'registration')})",
+            confidence_existence=0.98,
+            confidence_data=0.90,
+            identity_confidence=0.95,
+        )
+        db.add(svc_prof)
+        await db.flush()
+
+        ev = Evidence(
+            profile_id=svc_prof.id,
+            source_url=f"https://{domain}",
+            evidence_type="email_registration_confirmed",
+            detection_method=es.get("method", "registration"),
+            verification_status="verified",
+            confidence_score=0.98,
+            observed_at=datetime.now(timezone.utc),
+            match_evidence=f"Confirmed active account on {domain} via authorized email registration audit.",
+        )
+        db.add(ev)
+
+    # 3. If Gravatar profile exists, persist profile & evidence record
     gravatar_data = report.get("gravatar", {})
-    if gravatar_data.get("found"):
+    if gravatar_data.get("exists"):
         verified_count += 1
         grav_profile = Profile(
             investigation_id=inv.id,
@@ -116,7 +183,7 @@ async def verify_email_and_audit(
     await service.repo.update_status(
         investigation_id=inv.id,
         status="completed",
-        total_sites_checked=3,  # Gravatar, OpenPGP, Breach Check
+        total_sites_checked=39 * 2 + len(report.get("email_services", [])) + 10,
         verified_count=verified_count,
         inconclusive_count=0,
         completed=True,

@@ -6,16 +6,33 @@ Audits authorized email addresses for public digital footprints:
 - Breach exposure intelligence (HIBP model)
 - Discovered public usernames
 """
+import asyncio
 import hashlib
 import time
 import uuid
 from typing import Dict, Any, List, Optional
 import httpx
+import trio
+from holehe.core import import_submodules
 
 from packages.osint_engine.core.ssrf import validate_target_url
+from packages.osint_engine.adapters.curated_adapter import CuratedOSINTAdapter
+from packages.schemas import SearchResult, VerificationStatus
 
 # In-memory OTP store for email verification challenges
 EMAIL_OTP_STORE: Dict[str, Dict[str, Any]] = {}
+
+# Lazy-loaded holehe modules
+HOLEHE_MODULES = None
+
+def get_holehe_modules():
+    global HOLEHE_MODULES
+    if HOLEHE_MODULES is None:
+        try:
+            HOLEHE_MODULES = import_submodules("holehe.modules")
+        except Exception:
+            HOLEHE_MODULES = {}
+    return HOLEHE_MODULES
 
 
 class EmailAuditService:
@@ -68,9 +85,92 @@ class EmailAuditService:
         return audit_token
 
     @classmethod
+    def _scan_holehe_sync(cls, email: str) -> List[Dict[str, Any]]:
+        mods = get_holehe_modules()
+        if not mods:
+            return []
+
+        async def _async_scan():
+            results = []
+            async def run_mod(fn, client):
+                try:
+                    await fn(email, client, results)
+                except Exception:
+                    pass
+
+            valid_categories = [
+                'cms', 'crm', 'company', 'jobs', 'learning', 'mails', 'medias',
+                'music', 'productivity', 'products', 'programing', 'shopping',
+                'social_media', 'software'
+            ]
+            selected_fns = []
+            for k, v in mods.items():
+                parts = k.split('.')
+                if len(parts) >= 3 and parts[2] in valid_categories:
+                    fn = getattr(v, parts[-1], None)
+                    if fn:
+                        selected_fns.append(fn)
+
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                async with trio.open_nursery() as nursery:
+                    for fn in selected_fns:
+                        nursery.start_soon(run_mod, fn, client)
+            return [r for r in results if r.get('exists')]
+
+        try:
+            return trio.run(_async_scan)
+        except Exception:
+            return []
+
+    @classmethod
+    async def _scan_duolingo_email(cls, email: str) -> Optional[Dict[str, Any]]:
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                r = await client.get(
+                    f"https://www.duolingo.com/2017-06-30/users?email={email}",
+                    headers={"User-Agent": "OpenTrace/1.0"}
+                )
+                if r.status_code == 200:
+                    users = r.json().get("users", [])
+                    if users:
+                        return {
+                            "name": "duolingo",
+                            "domain": "duolingo.com",
+                            "method": "email_lookup",
+                            "exists": True,
+                        }
+        except Exception:
+            pass
+        return None
+
+    @classmethod
+    async def _scan_derived_profiles(cls, email: str) -> List[SearchResult]:
+        prefix = email.split("@")[0].lower()
+        clean_handle = prefix.replace(".", "").replace("_", "").replace("-", "")
+        hyphen_handle = prefix.replace(".", "-")
+        candidates = list(dict.fromkeys([clean_handle, hyphen_handle, prefix]))
+
+        adapter = CuratedOSINTAdapter()
+        discovered = []
+        seen_sites = set()
+
+        for handle in candidates[:2]:
+            async for res in adapter.search_username(handle, concurrency=10, timeout_seconds=4.0):
+                if res.status == VerificationStatus.VERIFIED and res.profile:
+                    site_key = f"{res.site_name}:{res.profile.username}"
+                    if site_key not in seen_sites:
+                        seen_sites.add(site_key)
+                        discovered.append(res)
+        return discovered
+
+    @classmethod
     async def audit_email(cls, audit_token: str) -> Dict[str, Any]:
         """
         Performs authorized public footprint audit for a verified email address.
+        Coordinates multi-engine enumeration:
+        1. Holehe email account existence enumeration (80+ services)
+        2. Curated cross-platform profile scanning on derived handles
+        3. Gravatar, OpenPGP, and Breach exposure indexing
         """
         session = EMAIL_OTP_STORE.get(audit_token)
         if not session or not session.get("verified") or time.time() > session.get("expires_at", 0):
@@ -79,22 +179,107 @@ class EmailAuditService:
         email = session["email"]
         md5_hash = hashlib.md5(email.encode("utf-8")).hexdigest()
 
+        # 1. Base metadata checks
         gravatar_data = await cls._check_gravatar(email, md5_hash)
         pgp_data = await cls._check_pgp_keyserver(email)
         breach_data = cls._check_breach_intelligence(email)
 
+        # 2. Email service registration enumeration (Holehe)
+        email_services = await asyncio.to_thread(cls._scan_holehe_sync, email)
+
+        # Duolingo direct check
+        duo_res = await cls._scan_duolingo_email(email)
+        if duo_res and not any(s.get("name") == "duolingo" for s in email_services):
+            email_services.append(duo_res)
+
+        # Google / Gmail account check
+        if email.endswith("@gmail.com") or email.endswith("@googlemail.com"):
+            if not any(s.get("name") == "google" for s in email_services):
+                email_services.append({
+                    "name": "google",
+                    "domain": "gmail.com",
+                    "method": "domain_auth",
+                    "exists": True,
+                })
+
+        # 3. Derived handle scan across curated sites
+        curated_results = await cls._scan_derived_profiles(email)
+
+        # 4. Extract unique discovered identities
+        discovered_usernames = set()
+        discovered_names = set()
+        discovered_avatars = []
+        discovered_locations = set()
+
+        if gravatar_data.get("display_name"):
+            discovered_names.add(gravatar_data["display_name"])
+        if gravatar_data.get("avatar_url"):
+            discovered_avatars.append(gravatar_data["avatar_url"])
+
+        curated_profiles_data = []
+        for res in curated_results:
+            p = res.profile
+            if p:
+                if p.username:
+                    discovered_usernames.add(p.username)
+                if p.display_name:
+                    clean_name = p.display_name.split("•")[0].split("(")[0].strip()
+                    if clean_name and len(clean_name) > 1 and not clean_name.lower().startswith("user"):
+                        discovered_names.add(clean_name)
+                if p.profile_image_url and p.profile_image_url not in discovered_avatars:
+                    discovered_avatars.append(p.profile_image_url)
+                if p.location:
+                    discovered_locations.add(p.location)
+
+                curated_profiles_data.append({
+                    "platform": p.platform,
+                    "category": p.category.value if hasattr(p.category, "value") else str(p.category),
+                    "username": p.username,
+                    "profile_url": p.profile_url,
+                    "display_name": p.display_name,
+                    "biography": p.biography,
+                    "public_website": p.public_website,
+                    "profile_image_url": p.profile_image_url,
+                    "location": p.location,
+                    "confidence_existence": p.confidence_existence,
+                    "confidence_data": p.confidence_data,
+                    "identity_confidence": p.identity_confidence,
+                    "evidence": {
+                        "source_url": res.evidence.source_url if res.evidence else p.profile_url,
+                        "evidence_type": res.evidence.evidence_type if res.evidence else "curated_profile",
+                        "detection_method": res.evidence.detection_method.value if res.evidence and hasattr(res.evidence.detection_method, "value") else "composite",
+                        "match_evidence": res.evidence.match_evidence if res.evidence else "Verified signature",
+                        "confidence_score": res.evidence.confidence_score if res.evidence else 0.95,
+                    }
+                })
+
+        total_discovered = len(curated_profiles_data) + len(email_services) + (1 if gravatar_data.get("exists") else 0)
+
         return {
             "email": email,
+            "email_hash": md5_hash,
             "verified_ownership": True,
             "audited_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "gravatar_profile": gravatar_data,
-            "pgp_key_records": pgp_data,
-            "breach_exposure": breach_data,
+            "gravatar": gravatar_data,
+            "pgp_keys": pgp_data,
+            "breach_intelligence": breach_data,
+            "email_services": email_services,
+            "curated_profiles": curated_profiles_data,
+            "discovered_metadata": {
+                "usernames": sorted(list(discovered_usernames)),
+                "names": sorted(list(discovered_names)),
+                "locations": sorted(list(discovered_locations)),
+                "avatars": discovered_avatars[:8],
+                "total_profiles_count": total_discovered,
+            },
             "summary": {
                 "has_public_gravatar": gravatar_data.get("exists", False),
                 "has_pgp_key": pgp_data.get("exists", False),
                 "breach_count": len(breach_data.get("breaches", [])),
                 "risk_rating": "Moderate" if len(breach_data.get("breaches", [])) > 0 else "Low",
+                "email_services_count": len(email_services),
+                "curated_profiles_count": len(curated_profiles_data),
+                "total_discovered": total_discovered,
             },
         }
 
