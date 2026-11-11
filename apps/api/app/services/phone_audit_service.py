@@ -85,12 +85,24 @@ class PhoneAuditService:
         return audit_token
 
     @classmethod
-    def audit_phone(cls, audit_token: str) -> Dict[str, Any]:
-        session = PHONE_OTP_STORE.get(audit_token)
-        if not session or not session.get("verified") or time.time() > session.get("expires_at", 0):
-            raise ValueError("Invalid or expired phone audit authorization token.")
+    def audit_phone(cls, token_or_phone: str) -> Dict[str, Any]:
+        if token_or_phone.startswith("phone_tok_"):
+            session = PHONE_OTP_STORE.get(token_or_phone)
+            if not session or not session.get("verified") or time.time() > session.get("expires_at", 0):
+                raise ValueError("Invalid or expired phone audit authorization token.")
+            phone = session["phone"]
+            verified_ownership = True
+        else:
+            raw = token_or_phone.strip()
+            clean_num = re.sub(r"[^\d+]", "", raw)
+            if not clean_num.startswith("+"):
+                if len(clean_num) == 10 and clean_num[0] in "23456789":
+                    clean_num = "+91" + clean_num
+                else:
+                    clean_num = "+" + clean_num
+            phone = clean_num
+            verified_ownership = False
 
-        phone = session["phone"]
         digits = phone.lstrip("+")
 
         # Country code identification
@@ -106,7 +118,7 @@ class PhoneAuditService:
 
         return {
             "phone": phone,
-            "verified_ownership": True,
+            "verified_ownership": verified_ownership,
             "format": {
                 "e164": phone,
                 "country_code": f"+{detected_code}" if detected_code else "Unknown",
@@ -122,6 +134,6 @@ class PhoneAuditService:
             "summary": {
                 "is_valid_format": True,
                 "is_active_allocation": True,
-                "verified_control": True,
+                "verified_control": verified_ownership,
             },
         }

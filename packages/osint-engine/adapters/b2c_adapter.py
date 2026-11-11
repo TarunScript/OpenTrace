@@ -295,3 +295,4 @@ class B2CAdapter:
                     results.append(item)
 
         return results
+
