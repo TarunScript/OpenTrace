@@ -18,6 +18,8 @@ class PlatformCategory(str, Enum):
     GAMING = "gaming"
     MEDIA = "media"
     TECH = "tech"
+    SHOPPING = "shopping"
+    PRODUCTIVITY = "productivity"
     MESSAGING = "messaging"
     BLOGGING = "blogging"
     OTHER = "other"

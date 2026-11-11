@@ -63,6 +63,7 @@ class IdentityResolver:
         cls,
         target_username: str,
         profiles: List[ProfileData],
+        phones: Optional[List[Dict[str, Any]]] = None,
     ) -> InvestigationGraph:
         """
         Builds the relationship graph for all discovered profiles.
@@ -188,6 +189,38 @@ class IdentityResolver:
                             evidence_reason=f"Both profiles share identical display name: '{p1.display_name}'",
                         )
                     )
+
+        # 4. Add phone hint nodes and edges
+        if phones:
+            for p_idx, phone in enumerate(phones):
+                mask = phone.get("number_mask")
+                source = phone.get("source", "B2C Service")
+                if not mask:
+                    continue
+                phone_id = f"phone_{p_idx}"
+                nodes.append(
+                    GraphNode(
+                        id=phone_id,
+                        type="phone_hint",
+                        label=f"Phone: {mask} ({source})",
+                        platform=source,
+                        category="phone",
+                        status="verified",
+                        confidence_existence=0.90,
+                        confidence_data=0.85,
+                    )
+                )
+                edges.append(
+                    RelationshipEdge(
+                        id=f"edge_phone_{phone_id}",
+                        source=root_id,
+                        target=phone_id,
+                        relationship_type="associated_phone_hint",
+                        confidence_tier="strongly_supported",
+                        confidence_score=0.90,
+                        evidence_reason=f"Recovery phone mask {mask} verified via {source}.",
+                    )
+                )
 
         return InvestigationGraph(nodes=nodes, edges=edges)
 

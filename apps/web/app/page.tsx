@@ -52,45 +52,14 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
 
-    // Email Self-Audit Flow
-    if (searchTab === "email") {
-      try {
-        const challenge = await api.requestEmailChallenge(clean);
-        setOtpChallengeId(challenge.challenge_id);
-        setOtpTarget(clean);
-        setOtpType("email");
-        setDevOtp(challenge.dev_otp);
-        setOtpCode(challenge.dev_otp || "");
-        setOtpError(null);
-        setOtpModalOpen(true);
-      } catch (err: any) {
-        setError(err.message || "Failed to initiate email verification.");
-      } finally {
-        setLoading(false);
-      }
-      return;
+    // Auto-detect input type if user pastes an email or phone number in any tab
+    let effectiveType: "username" | "email" | "phone" = searchTab;
+    if (clean.includes("@")) {
+      effectiveType = "email";
+    } else if (/^\+?[0-9]{7,15}$/.test(clean.replace(/[\s\-\(\)]/g, ""))) {
+      effectiveType = "phone";
     }
 
-    // Phone Self-Audit Flow
-    if (searchTab === "phone") {
-      try {
-        const challenge = await api.requestPhoneChallenge(clean);
-        setOtpChallengeId(challenge.challenge_id);
-        setOtpTarget(clean);
-        setOtpType("phone");
-        setDevOtp(challenge.dev_otp);
-        setOtpCode(challenge.dev_otp || "");
-        setOtpError(null);
-        setOtpModalOpen(true);
-      } catch (err: any) {
-        setError(err.message || "Failed to initiate phone verification.");
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    // Standard Username Search Flow
     try {
       const options: any = {
         deep_search: isDeepSearch,
@@ -100,10 +69,10 @@ export default function HomePage() {
         options.categories = [selectedCategory];
       }
 
-      const inv = await api.createInvestigation(clean, "username", options);
+      const inv = await api.createInvestigation(clean, effectiveType, options);
       router.push(`/investigation/${inv.id}`);
     } catch (err: any) {
-      setError(err.message || "Failed to initiate investigation.");
+      setError(err.message || "Failed to initiate digital footprint investigation.");
       setLoading(false);
     }
   };

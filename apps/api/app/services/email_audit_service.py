@@ -17,6 +17,7 @@ from holehe.core import import_submodules
 
 from packages.osint_engine.core.ssrf import validate_target_url
 from packages.osint_engine.adapters.curated_adapter import CuratedOSINTAdapter
+from packages.osint_engine.adapters.b2c_adapter import B2CAdapter
 from packages.schemas import SearchResult, VerificationStatus
 
 # In-memory OTP store for email verification challenges
@@ -164,19 +165,25 @@ class EmailAuditService:
         return discovered
 
     @classmethod
-    async def audit_email(cls, audit_token: str) -> Dict[str, Any]:
+    async def audit_email(cls, audit_token_or_email: str) -> Dict[str, Any]:
         """
-        Performs authorized public footprint audit for a verified email address.
+        Performs authorized or direct public footprint audit for an email address.
         Coordinates multi-engine enumeration:
-        1. Holehe email account existence enumeration (80+ services)
-        2. Curated cross-platform profile scanning on derived handles
-        3. Gravatar, OpenPGP, and Breach exposure indexing
+        1. B2C & Shopping service probing (DoorDash, AJIO, Apple, Amazon, AliExpress, etc.)
+        2. Holehe email account existence enumeration (80+ services)
+        3. Curated cross-platform profile scanning on derived handles
+        4. Gravatar, OpenPGP, and Breach exposure indexing
         """
-        session = EMAIL_OTP_STORE.get(audit_token)
-        if not session or not session.get("verified") or time.time() > session.get("expires_at", 0):
-            raise ValueError("Invalid or expired email audit authorization token.")
+        if "@" in audit_token_or_email:
+            email = audit_token_or_email.strip().lower()
+            verified_ownership = False
+        else:
+            session = EMAIL_OTP_STORE.get(audit_token_or_email)
+            if not session or not session.get("verified") or time.time() > session.get("expires_at", 0):
+                raise ValueError("Invalid or expired email audit authorization token.")
+            email = session["email"]
+            verified_ownership = True
 
-        email = session["email"]
         md5_hash = hashlib.md5(email.encode("utf-8")).hexdigest()
 
         # 1. Base metadata checks
@@ -184,20 +191,23 @@ class EmailAuditService:
         pgp_data = await cls._check_pgp_keyserver(email)
         breach_data = cls._check_breach_intelligence(email)
 
-        # 2. Email service registration enumeration (Holehe)
+        # 2. Email service registration enumeration (Holehe + B2C prober)
         email_services = await asyncio.to_thread(cls._scan_holehe_sync, email)
 
-        # Duolingo direct check
-        duo_res = await cls._scan_duolingo_email(email)
-        if duo_res and not any(s.get("name") == "duolingo" for s in email_services):
-            email_services.append(duo_res)
+        # Specialized B2C & Shopping probers (DoorDash, AJIO, Apple, Amazon, AliExpress, Grammarly, Canva, Zoom, Atlassian, Duolingo, etc.)
+        b2c_findings = await B2CAdapter.scan_all_b2c(email)
+        for b in b2c_findings:
+            if not any(s.get("name") == b.get("name") for s in email_services):
+                email_services.append(b)
 
         # Google / Gmail account check
         if email.endswith("@gmail.com") or email.endswith("@googlemail.com"):
             if not any(s.get("name") == "google" for s in email_services):
                 email_services.append({
                     "name": "google",
+                    "display_name": "Google / Gmail",
                     "domain": "gmail.com",
+                    "category": "tech",
                     "method": "domain_auth",
                     "exists": True,
                 })
@@ -205,11 +215,33 @@ class EmailAuditService:
         # 3. Derived handle scan across curated sites
         curated_results = await cls._scan_derived_profiles(email)
 
-        # 4. Extract unique discovered identities
+        # 4. Extract unique discovered identities, phone numbers & recovery hints
         discovered_usernames = set()
         discovered_names = set()
         discovered_avatars = []
         discovered_locations = set()
+        discovered_phones = []
+        discovered_recovery_emails = []
+
+        # Extract phone & recovery email hints from B2C, ecommerce & tech service recovery screens
+        for es in email_services:
+            source_label = es.get("display_name") or es.get("name", "Service").capitalize()
+            if es.get("phoneNumber"):
+                phone_val = str(es["phoneNumber"]).strip()
+                if phone_val and not any(p["number_mask"] == phone_val for p in discovered_phones):
+                    discovered_phones.append({
+                        "number_mask": phone_val,
+                        "source": source_label,
+                        "domain": es.get("domain", ""),
+                    })
+            if es.get("emailrecovery"):
+                rec_val = str(es["emailrecovery"]).strip()
+                if rec_val and not any(r["email_mask"] == rec_val for r in discovered_recovery_emails):
+                    discovered_recovery_emails.append({
+                        "email_mask": rec_val,
+                        "source": source_label,
+                        "domain": es.get("domain", ""),
+                    })
 
         if gravatar_data.get("display_name"):
             discovered_names.add(gravatar_data["display_name"])
@@ -258,7 +290,7 @@ class EmailAuditService:
         return {
             "email": email,
             "email_hash": md5_hash,
-            "verified_ownership": True,
+            "verified_ownership": verified_ownership,
             "audited_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "gravatar": gravatar_data,
             "pgp_keys": pgp_data,
@@ -270,6 +302,8 @@ class EmailAuditService:
                 "names": sorted(list(discovered_names)),
                 "locations": sorted(list(discovered_locations)),
                 "avatars": discovered_avatars[:8],
+                "phones": discovered_phones,
+                "recovery_emails": discovered_recovery_emails,
                 "total_profiles_count": total_discovered,
             },
             "summary": {

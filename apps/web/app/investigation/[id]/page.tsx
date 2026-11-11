@@ -20,6 +20,8 @@ import {
   Eye,
   Globe,
   Share2,
+  Phone,
+  Mail,
 } from "lucide-react";
 import {
   api,
@@ -392,8 +394,8 @@ export default function InvestigationPage() {
             </div>
           </div>
 
-          {/* Fingerprint.to-style Identity Overview Header for Email Audits */}
-          {investigation.search_type === "email" && results.summary.audit_report.discovered_metadata && (
+          {/* Fingerprint.to-style Identity Overview Header */}
+          {results?.summary?.audit_report?.discovered_metadata && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5 pb-5 border-b border-slate-800">
               {/* Discovered Profile Pictures */}
               <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl">
@@ -454,6 +456,69 @@ export default function InvestigationPage() {
                     ))
                   ) : (
                     <span className="text-xs text-slate-500">None detected</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Associated Masked Phone Numbers & Recovery Hints (Fingerprint.to Correlated Signals) */}
+          {(investigation.search_type === "email" || results.summary?.audit_report?.discovered_metadata?.phones?.length > 0) && (
+            <div className="mb-5 pb-5 border-b border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Masked Phones Card */}
+              <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                  Associated Phone Numbers (Masked B2C Recovery Hints)
+                </span>
+                <div className="space-y-1.5">
+                  {results.summary?.audit_report?.discovered_metadata?.phones?.length > 0 ? (
+                    results.summary.audit_report.discovered_metadata.phones.map((p: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs"
+                      >
+                        <span className="font-mono text-emerald-400 font-bold tracking-wider">
+                          {p.number_mask}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono">
+                          {p.source}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      No masked phone numbers exposed by standard B2C recovery screens. Shopping platforms (Amazon, Apple, AJIO, DoorDash) return masked hints only when an active recovery challenge is triggered.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Masked Recovery Emails Card */}
+              <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                  Secondary Recovery Emails (Masked)
+                </span>
+                <div className="space-y-1.5">
+                  {results.summary?.audit_report?.discovered_metadata?.recovery_emails?.length > 0 ? (
+                    results.summary.audit_report.discovered_metadata.recovery_emails.map((r: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs"
+                      >
+                        <span className="font-mono text-cyan-400 font-bold tracking-wider">
+                          {r.email_mask}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono">
+                          {r.source}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      No alternate recovery email aliases returned by indexed provider challenges.
+                    </p>
                   )}
                 </div>
               </div>
@@ -642,8 +707,10 @@ export default function InvestigationPage() {
               className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 font-mono focus:outline-none focus:border-emerald-500"
             >
               <option value="all">All Categories</option>
+              <option value="shopping">Shopping & B2C</option>
               <option value="developer">Developer</option>
               <option value="social">Social</option>
+              <option value="productivity">Productivity</option>
               <option value="forums">Forums</option>
               <option value="gaming">Gaming</option>
               <option value="tech">Tech</option>
