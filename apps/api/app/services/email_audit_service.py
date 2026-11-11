@@ -217,15 +217,27 @@ class EmailAuditService:
 
         # 4. Extract unique discovered identities, phone numbers & recovery hints
         discovered_usernames = set()
+        email_handle = email.split("@")[0].lower()
+        if email_handle:
+            discovered_usernames.add(email_handle)
+
         discovered_names = set()
         discovered_avatars = []
         discovered_locations = set()
         discovered_phones = []
         discovered_recovery_emails = []
 
-        # Extract phone & recovery email hints from B2C, ecommerce & tech service recovery screens
+        # Extract phone, recovery email hints, and verified usernames from email services
         for es in email_services:
             source_label = es.get("display_name") or es.get("name", "Service").capitalize()
+            if es.get("username"):
+                u_val = str(es["username"]).strip().lstrip("@")
+                if u_val:
+                    discovered_usernames.add(u_val)
+            if es.get("fullname"):
+                fn_val = str(es["fullname"]).strip()
+                if fn_val:
+                    discovered_names.add(fn_val)
             if es.get("phoneNumber"):
                 phone_val = str(es["phoneNumber"]).strip()
                 if phone_val and not any(p["number_mask"] == phone_val for p in discovered_phones):
@@ -253,7 +265,9 @@ class EmailAuditService:
             p = res.profile
             if p:
                 if p.username:
-                    discovered_usernames.add(p.username)
+                    clean_u = p.username.strip().lstrip("@")
+                    if clean_u:
+                        discovered_usernames.add(clean_u)
                 if p.display_name:
                     clean_name = p.display_name.split("•")[0].split("(")[0].strip()
                     if clean_name and len(clean_name) > 1 and not clean_name.lower().startswith("user"):

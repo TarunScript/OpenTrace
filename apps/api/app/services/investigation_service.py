@@ -143,14 +143,22 @@ class InvestigationService:
                         prof_url = es.get("profile_url") or (f"https://{domain}" if domain else "https://www.google.com")
                         cat = es.get("category", "other")
                         phone_hint = es.get("phoneNumber")
+                        email_handle = clean_email.split("@")[0]
+                        resolved_user = es.get("username") or email_handle
+                        if resolved_user.startswith("@"):
+                            resolved_user = resolved_user[1:]
+
+                        display_title = es.get("fullname")
+                        if not display_title and phone_hint:
+                            display_title = f"Verified ({phone_hint})"
 
                         prof = Profile(
                             investigation_id=investigation_id,
                             platform=service_name,
                             category=cat,
-                            username=clean_email,
+                            username=resolved_user,
                             profile_url=prof_url,
-                            display_name=es.get("fullname") or (f"Registered ({phone_hint})" if phone_hint else "Active Account"),
+                            display_name=display_title,
                             biography=es.get("evidence_text") or f"Account confirmed on {domain} via {es.get('method', 'verification')}.",
                             public_website=f"https://{domain}" if domain else None,
                             profile_image_url=es.get("avatar"),
@@ -406,6 +414,10 @@ class InvestigationService:
 
                     for b2c in b2c_results:
                         if b2c.get("exists"):
+                            matched_user = b2c.get("username")
+                            if matched_user and matched_user.lower() not in (target_username.lower(), clean_user.lower()):
+                                continue
+
                             verified_count += 1
                             total_checked += 1
                             service_name = b2c.get("display_name") or b2c.get("name", "Service").capitalize()
@@ -423,9 +435,9 @@ class InvestigationService:
                                 investigation_id=investigation_id,
                                 platform=service_name,
                                 category=b2c.get("category", "shopping"),
-                                username=target_username,
+                                username=matched_user or target_username,
                                 profile_url=b2c.get("profile_url", f"https://{domain}"),
-                                display_name=f"Linked Account ({phone_mask})" if phone_mask else "Linked Account",
+                                display_name=b2c.get("fullname") or (f"Verified Account ({phone_mask})" if phone_mask else None),
                                 biography=b2c.get("evidence_text", f"Associated {service_name} account linked to candidate identifier."),
                                 public_website=f"https://{domain}" if domain else None,
                                 confidence_existence=0.90,

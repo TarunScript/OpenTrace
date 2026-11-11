@@ -1,28 +1,9 @@
 """
-B2C & Ecommerce Platform Prober Adapter
-Discovers digital footprints on major consumer, retail, shopping and technology services:
-- DoorDash (Food delivery & masked recovery phone extraction)
-- AJIO (Indian fashion ecommerce & masked mobile recovery extraction)
-- Apple (Apple ID ecosystem & masked phone suffix extraction)
-- Amazon (Consumer retail & ecommerce accounts)
-- AliExpress / Alibaba (Global ecommerce marketplace)
-- Flipkart / Myntra (Leading Indian ecommerce marketplaces)
-- Microsoft / Office 365 (Consumer & enterprise accounts)
-- Adobe (Creative Cloud services)
-- Canva (Design platform)
-- Grammarly (Writing assistant platform)
-- Unacademy (Learning platform)
-- Duolingo (Language learning profile)
-- Zoom (Communications workspace)
-- Atlassian (Jira/Confluence identity)
-- Spotify (Audio streaming profile)
-- Replit (Cloud software development)
-- WordPress (Web publisher ecosystem)
-- Eventbrite (Ticketing and event management)
+B2C & Consumer Platform Prober Adapter
+Performs strictly verified, live public API checks without synthetic or fabricated data:
+- Duolingo Public User Directory API
 """
 import asyncio
-import re
-import hashlib
 from typing import List, Dict, Any, Optional
 import httpx
 
@@ -31,221 +12,30 @@ from packages.schemas import PlatformCategory
 
 class B2CAdapter:
     """
-    Coordinates asynchronous probing of B2C shopping and technology service accounts.
-    Extracts registration existence and masked phone/recovery email indicators.
+    Coordinates asynchronous probing of verified public endpoints.
+    Strictly reports only accounts that return confirmed positive HTTP responses.
+    Never synthesizes or fabricates phone numbers or account existence.
     """
 
     @classmethod
-    def _generate_masked_phone(cls, email: str, platform_key: str) -> Optional[str]:
-        """
-        Deterministically reconstructs platform-specific recovery phone masks based on account hash
-        when querying account recovery endpoints.
-        DoorDash format: (***) ***-**XX
-        AJIO format: 9XXXXXXXXX (e.g. 93XXXXX320)
-        Apple format: ******XX
-        """
-        h = hashlib.sha256(f"{email.lower().strip()}:{platform_key}".encode()).hexdigest()
-        last_two = f"{int(h[:4], 16) % 90 + 10}" # 10-99
-        last_three = f"{int(h[4:8], 16) % 900 + 100}" # 100-999
-        first_two = f"{int(h[8:12], 16) % 20 + 80}" # 80-99 (Indian mobile prefix)
-
-        if platform_key == "doordash":
-            return f"(***) ***-**{last_two}"
-        elif platform_key == "ajio":
-            return f"{first_two}XXXXX{last_three}"
-        elif platform_key == "apple":
-            return f"******{last_two}"
-        elif platform_key == "amazon":
-            return f"******{last_two}"
-        elif platform_key == "flipkart":
-            return f"{first_two}XXXXX{last_three}"
-        elif platform_key == "swiggy":
-            return f"{first_two}XXXXX{last_three}"
-        return None
-
-    @classmethod
-    async def probe_doordash(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        """Probes DoorDash account existence and masked phone number."""
-        try:
-            # DoorDash identity check
-            mask = cls._generate_masked_phone(email, "doordash")
-            return {
-                "name": "doordash",
-                "display_name": "DoorDash",
-                "domain": "doordash.com",
-                "category": PlatformCategory.SHOPPING.value,
-                "exists": True,
-                "method": "recovery_probe",
-                "phoneNumber": mask,
-                "emailrecovery": None,
-                "profile_url": "https://www.doordash.com",
-                "evidence_text": f"Account verified. Recovery SMS hint: {mask}",
-            }
-        except Exception:
-            return None
-
-    @classmethod
-    async def probe_ajio(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        """Probes AJIO fashion ecommerce account existence and masked mobile."""
-        try:
-            mask = cls._generate_masked_phone(email, "ajio")
-            return {
-                "name": "ajio",
-                "display_name": "AJIO",
-                "domain": "ajio.com",
-                "category": PlatformCategory.SHOPPING.value,
-                "exists": True,
-                "method": "auth_lookup",
-                "phoneNumber": mask,
-                "emailrecovery": None,
-                "profile_url": "https://www.ajio.com",
-                "evidence_text": f"Registered Reliance Retail/AJIO customer. Associated mobile: {mask}",
-            }
-        except Exception:
-            return None
-
-    @classmethod
-    async def probe_apple(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        """Probes Apple ID existence and recovery phone suffix."""
-        try:
-            # Query iforgot recovery endpoint
-            mask = cls._generate_masked_phone(email, "apple")
-            return {
-                "name": "apple",
-                "display_name": "Apple",
-                "domain": "apple.com",
-                "category": PlatformCategory.TECH.value,
-                "exists": True,
-                "method": "iforgot_recovery",
-                "phoneNumber": mask,
-                "emailrecovery": None,
-                "profile_url": "https://appleid.apple.com",
-                "evidence_text": f"Active Apple ID account. Trusted recovery phone: {mask}",
-            }
-        except Exception:
-            return None
-
-    @classmethod
-    async def probe_amazon(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        """Probes Amazon consumer ecommerce registration."""
-        try:
-            mask = cls._generate_masked_phone(email, "amazon")
-            return {
-                "name": "amazon",
-                "display_name": "Amazon",
-                "domain": "amazon.com",
-                "category": PlatformCategory.SHOPPING.value,
-                "exists": True,
-                "method": "auth_lookup",
-                "phoneNumber": mask,
-                "emailrecovery": None,
-                "profile_url": "https://www.amazon.com",
-                "evidence_text": f"Registered Amazon customer account. Recovery challenge: {mask}",
-            }
-        except Exception:
-            return None
-
-    @classmethod
-    async def probe_aliexpress(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "aliexpress",
-            "display_name": "AliExpress",
-            "domain": "aliexpress.com",
-            "category": PlatformCategory.SHOPPING.value,
-            "exists": True,
-            "method": "pre_auth",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://www.aliexpress.com",
-            "evidence_text": "Registered AliExpress retail customer profile",
-        }
-
-    @classmethod
-    async def probe_grammarly(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "grammarly",
-            "display_name": "Grammarly",
-            "domain": "grammarly.com",
-            "category": PlatformCategory.PRODUCTIVITY.value,
-            "exists": True,
-            "method": "sso_lookup",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://www.grammarly.com",
-            "evidence_text": "Active Grammarly workspace member",
-        }
-
-    @classmethod
-    async def probe_unacademy(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "unacademy",
-            "display_name": "Unacademy",
-            "domain": "unacademy.com",
-            "category": PlatformCategory.FORUMS.value,
-            "exists": True,
-            "method": "auth_lookup",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://unacademy.com",
-            "evidence_text": "Enrolled Unacademy learner profile",
-        }
-
-    @classmethod
-    async def probe_canva(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "canva",
-            "display_name": "Canva",
-            "domain": "canva.com",
-            "category": PlatformCategory.PRODUCTIVITY.value,
-            "exists": True,
-            "method": "sso_check",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://www.canva.com",
-            "evidence_text": "Registered Canva design team account",
-        }
-
-    @classmethod
-    async def probe_zoom(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "zoom",
-            "display_name": "Zoom",
-            "domain": "zoom.us",
-            "category": PlatformCategory.PRODUCTIVITY.value,
-            "exists": True,
-            "method": "sso_auth",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://zoom.us",
-            "evidence_text": "Active Zoom communication workspace",
-        }
-
-    @classmethod
-    async def probe_atlassian(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "atlassian",
-            "display_name": "Atlassian",
-            "domain": "atlassian.com",
-            "category": PlatformCategory.DEVELOPER.value,
-            "exists": True,
-            "method": "id_lookup",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://id.atlassian.com",
-            "evidence_text": "Atlassian Cloud identity (Jira/Confluence)",
-        }
-
-    @classmethod
     async def probe_duolingo(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
+        """
+        Queries Duolingo's public user endpoint.
+        Returns profile details only if a genuine account exists for this email.
+        """
         try:
             r = await client.get(
-                f"https://www.duolingo.com/2017-06-30/users?email={email}",
-                headers={"User-Agent": "Mozilla/5.0"}
+                f"https://www.duolingo.com/2017-06-30/users?email={email.strip().lower()}",
+                headers={"User-Agent": "OpenTrace/1.0 (OSINT Digital Footprint Engine)"}
             )
             if r.status_code == 200:
                 users = r.json().get("users", [])
                 if users:
                     u = users[0]
+                    username = u.get("username")
+                    fullname = u.get("name")
+                    avatar = u.get("picture")
+                    streak = u.get("streak", 0)
                     return {
                         "name": "duolingo",
                         "display_name": "Duolingo",
@@ -253,189 +43,23 @@ class B2CAdapter:
                         "category": PlatformCategory.FORUMS.value,
                         "exists": True,
                         "method": "public_api",
-                        "username": u.get("username"),
-                        "fullname": u.get("name"),
-                        "avatar": u.get("picture"),
+                        "username": username,
+                        "fullname": fullname or username,
+                        "avatar": avatar,
                         "phoneNumber": None,
                         "emailrecovery": None,
-                        "profile_url": f"https://www.duolingo.com/profile/{u.get('username')}" if u.get("username") else "https://www.duolingo.com",
-                        "evidence_text": f"Active Duolingo learner (Streak: {u.get('streak', 0)})",
+                        "profile_url": f"https://www.duolingo.com/profile/{username}" if username else "https://www.duolingo.com",
+                        "evidence_text": f"Active Duolingo learner (Username: {username}, Streak: {streak})",
                     }
         except Exception:
             pass
         return None
 
     @classmethod
-    async def probe_flipkart(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        mask = cls._generate_masked_phone(email, "flipkart")
-        return {
-            "name": "flipkart",
-            "display_name": "Flipkart",
-            "domain": "flipkart.com",
-            "category": PlatformCategory.SHOPPING.value,
-            "exists": True,
-            "method": "auth_lookup",
-            "phoneNumber": mask,
-            "emailrecovery": None,
-            "profile_url": "https://www.flipkart.com",
-            "evidence_text": f"Registered Flipkart shopping account. Recovery mobile hint: {mask}",
-        }
-
-    @classmethod
-    async def probe_swiggy(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        mask = cls._generate_masked_phone(email, "swiggy")
-        return {
-            "name": "swiggy",
-            "display_name": "Swiggy",
-            "domain": "swiggy.com",
-            "category": PlatformCategory.SHOPPING.value,
-            "exists": True,
-            "method": "auth_lookup",
-            "phoneNumber": mask,
-            "emailrecovery": None,
-            "profile_url": "https://www.swiggy.com",
-            "evidence_text": f"Registered Swiggy food & delivery account. Mobile hint: {mask}",
-        }
-
-    @classmethod
-    async def probe_zomato(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "zomato",
-            "display_name": "Zomato",
-            "domain": "zomato.com",
-            "category": PlatformCategory.SHOPPING.value,
-            "exists": True,
-            "method": "auth_lookup",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://www.zomato.com",
-            "evidence_text": "Active Zomato consumer profile",
-        }
-
-    @classmethod
-    async def probe_uber(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "uber",
-            "display_name": "Uber",
-            "domain": "uber.com",
-            "category": PlatformCategory.SHOPPING.value,
-            "exists": True,
-            "method": "pre_auth",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://www.uber.com",
-            "evidence_text": "Registered Uber mobility and delivery account",
-        }
-
-    @classmethod
-    async def probe_microsoft(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "microsoft",
-            "display_name": "Microsoft",
-            "domain": "microsoft.com",
-            "category": PlatformCategory.TECH.value,
-            "exists": True,
-            "method": "federation_lookup",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://account.microsoft.com",
-            "evidence_text": "Active Microsoft/Office 365 identity",
-        }
-
-    @classmethod
-    async def probe_adobe(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "adobe",
-            "display_name": "Adobe",
-            "domain": "adobe.com",
-            "category": PlatformCategory.TECH.value,
-            "exists": True,
-            "method": "auth_lookup",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://account.adobe.com",
-            "evidence_text": "Registered Adobe Creative Cloud account",
-        }
-
-    @classmethod
-    async def probe_notion(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "notion",
-            "display_name": "Notion",
-            "domain": "notion.so",
-            "category": PlatformCategory.PRODUCTIVITY.value,
-            "exists": True,
-            "method": "workspace_check",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://www.notion.so",
-            "evidence_text": "Registered Notion workspace member",
-        }
-
-    @classmethod
-    async def probe_figma(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "figma",
-            "display_name": "Figma",
-            "domain": "figma.com",
-            "category": PlatformCategory.PRODUCTIVITY.value,
-            "exists": True,
-            "method": "sso_check",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://www.figma.com",
-            "evidence_text": "Registered Figma design organization member",
-        }
-
-    @classmethod
-    async def probe_airtable(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "airtable",
-            "display_name": "Airtable",
-            "domain": "airtable.com",
-            "category": PlatformCategory.PRODUCTIVITY.value,
-            "exists": True,
-            "method": "sso_lookup",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://airtable.com",
-            "evidence_text": "Registered Airtable base collaborator",
-        }
-
-    @classmethod
-    async def probe_asana(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "asana",
-            "display_name": "Asana",
-            "domain": "asana.com",
-            "category": PlatformCategory.PRODUCTIVITY.value,
-            "exists": True,
-            "method": "domain_lookup",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://app.asana.com",
-            "evidence_text": "Registered Asana workspace user",
-        }
-
-    @classmethod
-    async def probe_w3schools(cls, email: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-        return {
-            "name": "w3schools",
-            "display_name": "W3Schools",
-            "domain": "w3schools.com",
-            "category": PlatformCategory.FORUMS.value,
-            "exists": True,
-            "method": "account_check",
-            "phoneNumber": None,
-            "emailrecovery": None,
-            "profile_url": "https://my-learning.w3schools.com",
-            "evidence_text": "Registered W3Schools My-Learning student account",
-        }
-
-    @classmethod
     async def scan_all_b2c(cls, email: str) -> List[Dict[str, Any]]:
         """
-        Concurrently probes all supported B2C, ecommerce, and consumer platforms for a given email address.
+        Concurrently probes verified live public endpoints for a given email address.
+        Only returns verified live discoveries.
         """
         clean_email = email.strip().lower()
         results: List[Dict[str, Any]] = []
@@ -445,36 +69,9 @@ class B2CAdapter:
             "Accept": "application/json, text/plain, */*",
         }
 
-        async with httpx.AsyncClient(timeout=5.0, headers=headers, follow_redirects=True) as client:
-            tasks = [
-                cls.probe_doordash(clean_email, client),
-                cls.probe_ajio(clean_email, client),
-                cls.probe_apple(clean_email, client),
-                cls.probe_amazon(clean_email, client),
-                cls.probe_flipkart(clean_email, client),
-                cls.probe_swiggy(clean_email, client),
-                cls.probe_zomato(clean_email, client),
-                cls.probe_uber(clean_email, client),
-                cls.probe_aliexpress(clean_email, client),
-                cls.probe_microsoft(clean_email, client),
-                cls.probe_adobe(clean_email, client),
-                cls.probe_grammarly(clean_email, client),
-                cls.probe_unacademy(clean_email, client),
-                cls.probe_canva(clean_email, client),
-                cls.probe_zoom(clean_email, client),
-                cls.probe_atlassian(clean_email, client),
-                cls.probe_duolingo(clean_email, client),
-                cls.probe_notion(clean_email, client),
-                cls.probe_figma(clean_email, client),
-                cls.probe_airtable(clean_email, client),
-                cls.probe_asana(clean_email, client),
-                cls.probe_w3schools(clean_email, client),
-            ]
-            completed = await asyncio.gather(*tasks, return_exceptions=True)
-
-            for item in completed:
-                if isinstance(item, dict) and item.get("exists"):
-                    results.append(item)
+        async with httpx.AsyncClient(timeout=6.0, headers=headers, follow_redirects=True) as client:
+            duo_res = await cls.probe_duolingo(clean_email, client)
+            if duo_res and duo_res.get("exists"):
+                results.append(duo_res)
 
         return results
-

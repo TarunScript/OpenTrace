@@ -129,10 +129,15 @@ export default function InvestigationPage() {
     if (!results) return;
     const profilesHtml = results.profiles.map(p => {
       const ev = p.evidence_records?.[0];
+      const cleanHandle = p.username.startsWith("@")
+        ? p.username.slice(1)
+        : p.username.includes("@")
+        ? p.username.split("@")[0]
+        : p.username;
       return `
       <div style="border: 1px solid #334155; background: #0f172a; color: #f8fafc; padding: 18px; border-radius: 12px; margin-bottom: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
         <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-          <h3 style="margin: 0; color: #34d399; font-size: 18px;">${p.platform} (@${p.username})</h3>
+          <h3 style="margin: 0; color: #34d399; font-size: 18px;">${p.platform} (@${cleanHandle})</h3>
           <span style="font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: #1e293b; color: #94a3b8; text-transform: uppercase;">${p.category}</span>
         </div>
         <p style="margin: 4px 0 10px 0;"><a href="${p.profile_url}" target="_blank" style="color: #38bdf8; text-decoration: none;">${p.profile_url}</a></p>
@@ -146,6 +151,20 @@ export default function InvestigationPage() {
       </div>
     `;
     }).join("");
+
+    const phones = results.summary?.audit_report?.discovered_metadata?.phones || [];
+    const phonesHtml = phones.length > 0 ? `
+      <div style="background: #0f172a; border: 1px solid #10b981; padding: 16px; border-radius: 10px; margin-bottom: 24px;">
+        <h3 style="color: #34d399; margin: 0 0 10px 0; font-size: 15px;">Associated Phone Numbers (Masked Recovery Hints)</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          ${phones.map((p: any) => `
+            <span style="background: #1e293b; border: 1px solid #334155; padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 13px; color: #34d399;">
+              <strong>${p.number_mask}</strong> <span style="color: #94a3b8; font-size: 11px;">(${p.source})</span>
+            </span>
+          `).join("")}
+        </div>
+      </div>
+    ` : "";
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -170,6 +189,8 @@ export default function InvestigationPage() {
         <div class="disclaimer">
           <strong>Transparency Notice:</strong> Confidence scores reflect heuristic pattern matching strength and data completeness. They are provided for intelligence assistance and do not constitute legal proof of identity ownership.
         </div>
+
+        ${phonesHtml}
 
         <h2 style="color: #f8fafc; font-size: 20px; margin-bottom: 16px;">Discovered Public Profiles (${results.profiles.length})</h2>
         ${profilesHtml || "<p style='color: #64748b;'>No verified profiles were discovered for this target identifier.</p>"}
@@ -266,9 +287,9 @@ export default function InvestigationPage() {
                 <span className="text-emerald-400">✉</span>
               ) : investigation.search_type === "phone" ? (
                 <span className="text-emerald-400">☎</span>
-              ) : (
+              ) : !investigation.target_value.startsWith("@") ? (
                 <span className="text-slate-500">@</span>
-              )}
+              ) : null}
               {investigation.target_value}
             </h1>
             <span className="text-xs text-slate-400 font-mono">
@@ -759,7 +780,7 @@ export default function InvestigationPage() {
                     className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-all inline-flex items-center gap-2 shadow-glow"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    Launch Fresh Search for @{investigation.target_value}
+                    Launch Fresh Search for {investigation.search_type === "email" ? investigation.target_value : (investigation.target_value.startsWith("@") ? investigation.target_value : `@${investigation.target_value}`)}
                   </button>
                 </>
               ) : isSearching ? (
@@ -825,7 +846,13 @@ export default function InvestigationPage() {
                                 {p.category}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-400 font-mono">@{p.username}</p>
+                            <p className="text-xs text-slate-400 font-mono">
+                              {p.username.startsWith("@")
+                                ? p.username
+                                : p.username.includes("@")
+                                ? `@${p.username.split("@")[0]}`
+                                : `@${p.username}`}
+                            </p>
                           </div>
                         </div>
 
@@ -837,7 +864,7 @@ export default function InvestigationPage() {
                       </div>
 
                       {/* Display name & Bio */}
-                      {p.display_name && (
+                      {p.display_name && p.display_name !== "Active Account" && (
                         <p className="text-xs font-semibold text-slate-200 mb-1">{p.display_name}</p>
                       )}
                       {p.biography ? (
