@@ -22,6 +22,13 @@ import {
   Share2,
   Phone,
   Mail,
+  ShoppingBag,
+  Code2,
+  Cpu,
+  Gamepad2,
+  MessageSquare,
+  Music,
+  Briefcase,
 } from "lucide-react";
 import {
   api,
@@ -272,6 +279,18 @@ export default function InvestigationPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {investigation.status === "failed" && (
+            <button
+              onClick={async () => {
+                const newInv = await api.createInvestigation(investigation.target_value, investigation.search_type, { deep_search: true });
+                router.push(`/investigation/${newInv.id}`);
+              }}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-all flex items-center gap-1.5 shadow-glow"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Re-run Search
+            </button>
+          )}
           <button
             onClick={handleExportJSON}
             disabled={!results}
@@ -725,7 +744,25 @@ export default function InvestigationPage() {
         <>
           {filteredProfiles.length === 0 ? (
             <div className="p-12 text-center bg-slate-900/40 border border-slate-800/80 rounded-2xl">
-              {isSearching ? (
+              {investigation.status === "failed" ? (
+                <>
+                  <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+                  <h3 className="text-base font-bold text-white mb-1">Previous Investigation Attempt Incomplete</h3>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto mb-5 leading-relaxed">
+                    This investigation record was created {formatTimeAgo(investigation.created_at)} before recent engine updates. Click below to launch a fresh live search with all 45+ platforms and B2C shopping recovery probers enabled.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      const newInv = await api.createInvestigation(investigation.target_value, investigation.search_type, { deep_search: true });
+                      router.push(`/investigation/${newInv.id}`);
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-all inline-flex items-center gap-2 shadow-glow"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Launch Fresh Search for @{investigation.target_value}
+                  </button>
+                </>
+              ) : isSearching ? (
                 <>
                   <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin mx-auto mb-3" />
                   <h3 className="text-base font-bold text-white mb-1">Scanning Public Registries...</h3>
