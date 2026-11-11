@@ -97,12 +97,12 @@ export default function HistoryPage() {
             >
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 font-mono font-bold">
-                  @
+                  {inv.search_type === "email" ? "✉" : inv.search_type === "phone" ? "☎" : "@"}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-white font-mono text-sm group-hover:text-emerald-400 transition-colors">
-                      @{inv.target_value}
+                      {inv.search_type === "email" || inv.search_type === "phone" ? "" : "@"}{inv.target_value}
                     </h3>
                     <span
                       className={`text-[10px] uppercase font-mono px-2 py-0.2 rounded-full border ${

@@ -4,6 +4,7 @@ Coordinates execution of username intelligence and cross-platform investigations
 Updates progress, executes concurrent probes, resolves identity relationships, and handles background execution.
 """
 import asyncio
+import re
 import json
 import logging
 from datetime import datetime, timezone
