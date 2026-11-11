@@ -143,10 +143,13 @@ class InvestigationService:
                         prof_url = es.get("profile_url") or (f"https://{domain}" if domain else "https://www.google.com")
                         cat = es.get("category", "other")
                         phone_hint = es.get("phoneNumber")
-                        email_handle = clean_email.split("@")[0]
-                        resolved_user = es.get("username") or email_handle
-                        if resolved_user.startswith("@"):
-                            resolved_user = resolved_user[1:]
+                        # Only set username if the platform API explicitly returned a public username (e.g. Duolingo)
+                        # Otherwise, do NOT guess the username — the identifier is the verified email address.
+                        verified_handle = es.get("username")
+                        if verified_handle:
+                            verified_handle = verified_handle.lstrip("@").strip()
+
+                        resolved_user = verified_handle if verified_handle else clean_email
 
                         display_title = es.get("fullname")
                         if not display_title and phone_hint:

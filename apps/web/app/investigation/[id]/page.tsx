@@ -129,15 +129,12 @@ export default function InvestigationPage() {
     if (!results) return;
     const profilesHtml = results.profiles.map(p => {
       const ev = p.evidence_records?.[0];
-      const cleanHandle = p.username.startsWith("@")
-        ? p.username.slice(1)
-        : p.username.includes("@")
-        ? p.username.split("@")[0]
-        : p.username;
+      const isEmailIdent = p.username.includes("@") || p.username === investigation.target_value;
+      const subtitle = isEmailIdent ? `Email: ${p.username}` : `@${p.username.replace(/^@/, "")}`;
       return `
       <div style="border: 1px solid #334155; background: #0f172a; color: #f8fafc; padding: 18px; border-radius: 12px; margin-bottom: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
         <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-          <h3 style="margin: 0; color: #34d399; font-size: 18px;">${p.platform} (@${cleanHandle})</h3>
+          <h3 style="margin: 0; color: #34d399; font-size: 18px;">${p.platform} (${subtitle})</h3>
           <span style="font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: #1e293b; color: #94a3b8; text-transform: uppercase;">${p.category}</span>
         </div>
         <p style="margin: 4px 0 10px 0;"><a href="${p.profile_url}" target="_blank" style="color: #38bdf8; text-decoration: none;">${p.profile_url}</a></p>
@@ -846,13 +843,16 @@ export default function InvestigationPage() {
                                 {p.category}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-400 font-mono">
-                              {p.username.startsWith("@")
-                                ? p.username
-                                : p.username.includes("@")
-                                ? `@${p.username.split("@")[0]}`
-                                : `@${p.username}`}
-                            </p>
+                            {p.username.includes("@") || p.username === investigation.target_value ? (
+                              <p className="text-xs text-slate-400 font-mono flex items-center gap-1 truncate max-w-[190px]">
+                                <span className="text-slate-500 font-sans text-[11px]">Email:</span>
+                                <span className="text-slate-300 truncate">{p.username}</span>
+                              </p>
+                            ) : (
+                              <p className="text-xs text-emerald-400 font-mono">
+                                {p.username.startsWith("@") ? p.username : `@${p.username}`}
+                              </p>
+                            )}
                           </div>
                         </div>
 

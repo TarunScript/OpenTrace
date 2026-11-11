@@ -217,9 +217,8 @@ class EmailAuditService:
 
         # 4. Extract unique discovered identities, phone numbers & recovery hints
         discovered_usernames = set()
-        email_handle = email.split("@")[0].lower()
-        if email_handle:
-            discovered_usernames.add(email_handle)
+        # Strictly DO NOT assume email prefix is a username across external services.
+        # Usernames must only be recorded if legitimately returned by a verified service prober.
 
         discovered_names = set()
         discovered_avatars = []
